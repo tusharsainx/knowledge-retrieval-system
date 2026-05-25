@@ -52,7 +52,15 @@ Phase 3 — Store embeddings in Qdrant locally, run first semantic search
 Phase 4 — Add BM25, combine with semantic search (hybrid retrieval)
 Phase 5 — Add BGE-Reranker on top of hybrid results, compare before/after
 Phase 6 — Feed ranked context to phi4 via Ollama, get a cited answer
-Phase 7 — Batch pipeline with Celery + Redis for scaling to 10M docs
+Phase 7 — Batch pipeline with Celery + Redis for scaling to 10M docs 
+Now implement async query handling:
+- FastAPI as the API layer with async endpoints
+- Redis as message queue for incoming queries
+- Celery workers to process queries in parallel
+- Poll endpoint to check query status
+- Configure Ollama for parallel inference
+Show me how 10k concurrent users would be handled
+
 Phase 8 — Add Langfuse tracing, evaluate and improve retrieval quality
 
 ## Rules
