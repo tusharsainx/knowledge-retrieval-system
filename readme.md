@@ -53,6 +53,9 @@ Phase 4 — Add BM25, combine with semantic search (hybrid retrieval)
 Phase 5 — Add BGE-Reranker on top of hybrid results, compare before/after
 Phase 6 — Feed ranked context to phi4 via Ollama, get a cited answer
 Phase 7 — Batch pipeline with Celery + Redis for scaling to 10M docs 
+phase 8- I will manually convert this codebase to follow design patterns and Solid principles
+so that future changes can be extensible
+
 Now implement async query handling:
 - FastAPI as the API layer with async endpoints
 - Redis as message queue for incoming queries
