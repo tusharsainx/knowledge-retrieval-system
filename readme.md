@@ -1,26 +1,56 @@
-# Distributed Knowledge Retrieval System
+# Distributed Cloud-Parity RAG Ingestion & Q&A System
 
-A highly scalable, production-grade, and zero-cost cloud-parity **RAG (Retrieval-Augmented Generation) System**. 
+A highly scalable, production-grade, and **zero-cost ($0/month)** cloud-parity **RAG (Retrieval-Augmented Generation) System** featuring a high-fidelity **React + Redux** dashboard!
 
-The entire system is optimized for **zero local memory overhead** and **high I/O concurrency**. It uses serverless cloud APIs for all CPU/GPU-intensive modeling, and **`arq`** (asyncio-based Redis queue) for highly concurrent, memory-efficient background task processing.
+The entire system is optimized for **zero local memory overhead** (consuming < 50MB RAM on all servers) and **high I/O concurrency**. It uses serverless cloud APIs for all CPU/GPU-heavy modeling, and an async-native, multi-process python container environment on **Render** paired with a global CDN frontend on **Vercel** to provide a complete web dashboard.
+
 ---
 
 ## 🏗️ High-Level System Architecture (HLD)
 
-The architecture is divided into two decoupled, specialized subsystems operating over the same database layer:
+The system consists of three decoupled, production-grade layers:
 
-### Part 1: Document Upload & Ingestion Pipeline (Admin Flow)
-Manages direct browser uploads via presigned S3/MinIO URLs, registers document states in a PostgreSQL metadata database, and triggers lightweight **`arq` async workers** to parse PDFs using **LlamaParse**, chunk them using **LlamaIndex**, embed using **Gemini `gemini-embedding-001`**, and upsert named dual-vectors (dense semantic vectors + sparse keyword weights) into **Qdrant Cloud**.
+1. **Vite + React + Redux SPA Frontend**:
+   * A premium dark-mode, glassmorphic dashboard built using responsive Vanilla CSS.
+   * Features **direct-to-S3 browser uploads** via presigned URLs to bypass web server bandwidth choke points.
+   * Auto-polls document ingestion states, showing progress, completion chunk counts, and live worker exception popover tooltips.
+   * Integrates an asynchronous **typewriter-style SSE word stream** for Gemini responses and parses citation tags into **interactive clickable pills** that slide open a retrieved context drawer.
 
-### Part 2: Semantic Q&A Retrieval Engine (User Flow)
-Takes natural language user queries, performs hybrid vector + BM25 keyword search, refines candidates using the serverless **Cohere Rerank API**, and feeds the context to **models/gemini-2.5-flash** to stream cited markdown responses.
+2. **FastAPI Application Gateway & Ingestion Subprocess (Web Service)**:
+   * Serves `/documents/upload-url`, `/confirm`, `/status`, and `/search` routes with full CORS compatibility.
+   * **Multi-Process Container Hack**: Automatically spawns and monitors the **`arq` background task worker** as a child subprocess inside the same container during boot. This enables running both the API gateway and ingestion worker concurrently on **Render's free web tier** for $0/month!
+
+3. **Asynchronous Ingestion Worker & Cloud Services**:
+   * Uses **LlamaParse Cloud API** to extract structured markdown with zero server overhead.
+   * Employs token-based sentence splitting locally via LlamaIndex.
+   * Generates dense embeddings via **Gemini `gemini-embedding-001`** (3072-d).
+   * Computes stateless sparse keyword weights via **stateless Feature Hashing** (BM25 trick) to scale to **10M documents** with 0MB RAM.
+   * Upserts named dense and sparse vectors directly to your **Qdrant Cloud** cluster.
+
+---
+
+## 🌐 Productionized Cloud Services Stack ($0/Month)
+
+The entire production footprint is deployed on free-developer tiers:
+
+| Component | Cloud Provider | Tier Details |
+| :--- | :--- | :--- |
+| **Frontend UI** | **Vercel** | Free static CDN hosting (Auto-built from `frontend/` root) |
+| **API Gateway & Worker** | **Render** | Free Python Web Service (spawns `arq` child worker process) |
+| **Relational Metadata DB** | **Supabase Postgres** | PostgreSQL 16 (connected via IPv4-compatible Session Pooler on Port 5432) |
+| **Document Storage (S3 API)** | **Supabase Storage** | S3-Compatible Private Object Storage (1GB free) |
+| **Task Queue Message Broker** | **Upstash Redis** | Serverless Redis (10,000 free commands/day, SSL `rediss://`) |
+| **Hybrid Vector Database** | **Qdrant Cloud** | Serverless Vector DB (1GB RAM free, holding ~200k vectors) |
+| **Dense Embeddings & LLM** | **Google AI Studio** | `gemini-embedding-001` & `gemini-2.5-flash` (Free Tier API) |
+| **Stateless Reranker** | **Cohere Dashboard** | `rerank-english-v3.0` API (Free Tier API, 0MB RAM) |
+
 ---
 
 ## 📝 Sequence Flows
 
 ### Part 1: Asynchronous Document Ingestion Flow
 
-The ingestion process is fully asynchronous, bypassing server memory bottlenecks by using **S3 presigned URLs** and ensuring **resiliency against Redis broker outages** via a transactional outbox status machine in PostgreSQL.
+The ingestion process is fully asynchronous, bypassing server memory bottlenecks by uploading directly to Supabase S3 and ensuring task queue resiliency via a transactional outbox status machine in PostgreSQL.
 
 ![Document Ingestion Flow](document_ingestion.png)
 
@@ -28,26 +58,9 @@ The ingestion process is fully asynchronous, bypassing server memory bottlenecks
 
 ### Part 2: Semantic Q&A Retrieval Flow
 
-Takes a natural language user question, queries Qdrant using the same hybrid sparse/dense parameters, applies local cross-encoder reranking, and constructs a factual response using Gemini 2.5 Flash.
+Takes a natural language user question, queries Qdrant using the same hybrid sparse/dense parameters, applies serverless Cohere reranking, and streams a factual, cited response using Gemini 2.5 Flash.
 
 ![Semantic Q&A Retrieval Flow](qa_reterival.png)
-
----
-
-## 📦 Ingestion State Machine (Transactional Outbox)
-
-To ensure zero task loss during Redis broker outages, documents transition through these database states:
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING_UPLOAD: POST /upload-url
-    PENDING_UPLOAD --> QUEUED: POST /confirm (Queue Online)
-    PENDING_UPLOAD --> QUEUING_FAILED: POST /confirm (Queue Offline)
-    QUEUING_FAILED --> QUEUED: Automated Outbox Recovery Cron
-    QUEUED --> PROCESSING: arq worker picks up task
-    PROCESSING --> COMPLETED: Successful Parse & Indexing
-    PROCESSING --> FAILED: Parse/Embed Error (Auto-retry up to 3)
-```
 
 ---
 
@@ -69,45 +82,41 @@ COHERE_API_KEY=your-cohere-api-key
 QDRANT_URL=https://your-cluster-url.aws.qdrant.io
 QDRANT_API_KEY=your-qdrant-cloud-api-key
 
-# PostgreSQL Database URL
-DATABASE_URL=postgresql://admin:admin@localhost:5432/doc_processor
+# PostgreSQL Connection String (Use Session Pooler port 5432 for Render IPv4-compatibility)
+DATABASE_URL=postgresql+asyncpg://postgres.your-ref:password@aws-1-your-region.pooler.supabase.com:5432/postgres
 
-# S3 / MinIO Object Storage Config
-S3_ENDPOINT_URL=http://localhost:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
+# Supabase Storage S3 Configuration (Generate keys in dashboard)
+S3_ENDPOINT_URL=https://your-ref.supabase.co/storage/v1/s3
+S3_ACCESS_KEY=your-generated-s3-access-key-id
+S3_SECRET_KEY=your-generated-s3-secret-access-key
 S3_BUCKET_NAME=documents
 
-# Redis Task Queue Config
-REDIS_URL=redis://localhost:6379/0
+# Upstash Redis Connection String (Use rediss:// for secure TLS)
+REDIS_URL=rediss://default:password@your-endpoint.upstash.io:6379
 ```
 
 ---
 
-## 🚀 Step-by-Step Local Development Execution
+## 🚀 Step-by-Step Local Execution
 
-### 1. Spin up Local Infrastructure (Docker Compose)
-Spins up MinIO (S3), Redis, and PostgreSQL locally (Qdrant is run in the cloud via Qdrant Cloud).
+### 1. Spin up Local Infrastructure (Docker)
+Spins up Redis, and PostgreSQL locally for dev testing:
 ```bash
 docker compose up -d
 ```
 
-### 2. Install Dependencies
+### 2. Run the Backend API & Worker
+Activate your pyenv virtual environment and start the FastAPI gateway (which will automatically launch the `arq` task worker in the background):
 ```bash
-pip install -r requirements.txt
-```
-
-### 3. Run FastAPI Application Gateway
-```bash
+source /Users/gabru/.pyenv/versions/3.11.14/envs/dp/bin/activate
 uvicorn api:app --reload --port 8000
 ```
 
-### 4. Run arq Worker
+### 3. Run the React Frontend dev server
+Navigate to the `frontend/` folder, install packages, and start the Vite server:
 ```bash
-arq tasks.WorkerSettings
+cd frontend
+npm install
+npm run dev
 ```
-
-### 5. Run Outbox Reconciliation Worker (Recovery Cron)
-```bash
-python3 outbox_poller.py
-```
+Open **`http://localhost:3000`** in your browser!
