@@ -23,11 +23,22 @@ import cohere
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("api_gateway")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 # Initialize FastAPI
 app = FastAPI(
     title="Production RAG Ingestion & Q&A Gateway",
     description="Zero-memory cloud-parity RAG Backend powered by Gemini, Cohere, Qdrant Cloud, and arq.",
     version="1.0"
+)
+
+# Configure CORS Middleware to support local dev (localhost:3000) and production cloud frontends
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # For production, replace with your specific frontend domains
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
