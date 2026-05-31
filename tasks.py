@@ -96,19 +96,29 @@ async def process_document(ctx, document_id: str):
             logger.error(f"Document {document_id} not found in PostgreSQL.")
             return
 
+        # Prevent duplicate processing (Idempotent / Self-Healing Worker)
+        if doc.status in ("PROCESSING", "COMPLETED"):
+            logger.info(f"⚠️ Document '{doc.filename}' (ID: {document_id}) is already in state '{doc.status}'. Skipping processing to prevent duplicate execution.")
+            return
+
         # Update state to PROCESSING
         doc.status = "PROCESSING"
         doc.updated_at = datetime.utcnow()
         await db.commit()
 
         try:
-            # 2. Download file from S3 / MinIO
+            # 2. Download file from S3 / MinIO with path-style addressing config
             logger.info(f"Downloading file from S3: {doc.s3_key}")
+            from botocore.config import Config
             s3_client = boto3.client(
                 "s3",
                 endpoint_url=S3_ENDPOINT_URL,
                 aws_access_key_id=S3_ACCESS_KEY,
                 aws_secret_access_key=S3_SECRET_KEY,
+                config=Config(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path"}
+                ),
                 region_name="us-east-1"
             )
             # Run blocking boto3 download in background thread

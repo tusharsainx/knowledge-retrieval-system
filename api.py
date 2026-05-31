@@ -55,13 +55,16 @@ cohere_client = cohere.AsyncClient(api_key=COHERE_API_KEY) if COHERE_API_KEY els
 # Configure Async Qdrant Client
 qdrant_client = AsyncQdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY) if QDRANT_URL else None
 
-# Initialize standard boto3 client (generating presigned URLs does not block as it's local cryptographic math)
+# Initialize standard boto3 client with S3 path-style addressing for Supabase Storage Cloud-parity
 s3_client = boto3.client(
     "s3",
     endpoint_url=S3_ENDPOINT_URL,
     aws_access_key_id=S3_ACCESS_KEY,
     aws_secret_access_key=S3_SECRET_KEY,
-    config=Config(signature_version="s3v4"),
+    config=Config(
+        signature_version="s3v4",
+        s3={"addressing_style": "path"}
+    ),
     region_name="us-east-1"
 )
 
