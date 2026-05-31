@@ -32,10 +32,12 @@ app = FastAPI(
     version="1.0"
 )
 
-# Configure CORS Middleware to support local dev (localhost:3000) and production cloud frontends
+# Configure CORS Middleware to strictly support production cloud frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For production, replace with your specific frontend domains
+    allow_origins=[
+        "https://knowledge-retrieval-system.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
