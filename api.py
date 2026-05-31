@@ -124,8 +124,42 @@ async def startup_event():
         except Exception as e:
             logger.error(f"❌ Qdrant Cloud connection/initialization error: {e}")
 
+    # Start the arq background task worker inside the same container (Multi-process cloud-parity hack)
+    try:
+        logger.info("Launching arq background worker subprocess inside the gateway container...")
+        app.state.worker_process = await asyncio.create_subprocess_exec(
+            "arq", "tasks.WorkerSettings",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        logger.info("✓ arq background worker subprocess launched successfully.")
+
+        # Read worker logs in background tasks and stream them directly into the Render unified console
+        async def log_streamer(stream, prefix):
+            while True:
+                line = await stream.readline()
+                if not line:
+                    break
+                logger.info(f"[{prefix}] {line.decode('utf-8').strip()}")
+
+        asyncio.create_task(log_streamer(app.state.worker_process.stdout, "arq_worker"))
+        asyncio.create_task(log_streamer(app.state.worker_process.stderr, "arq_worker_err"))
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to launch arq worker subprocess: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_event():
+    # Terminate the arq background worker subprocess on shutdown
+    if hasattr(app.state, "worker_process") and app.state.worker_process:
+        try:
+            logger.info("Terminating arq background worker subprocess...")
+            app.state.worker_process.terminate()
+            await app.state.worker_process.wait()
+            logger.info("✓ arq background worker subprocess stopped successfully.")
+        except Exception as e:
+            logger.error(f"Failed to stop arq worker subprocess: {e}")
+
     if hasattr(app.state, "redis_pool") and app.state.redis_pool:
         await app.state.redis_pool.close()
         logger.info("arq queue pool closed.")
