@@ -1,2 +1,21 @@
 /.vscode
 .prettierrc
+theory.txt
+sample.pdf
+system_design.md
+implementation_plan.md
+.env
+minio_data
+pg_data
+redis_data
+
+# Python build and cache artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Operating system files
+.DS_Store
+.DS_Store?
+._*
